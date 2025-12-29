@@ -17,11 +17,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create models directory
-RUN mkdir -p /usr/src/app/models
+# Create model directory
+RUN mkdir -p /usr/src/app/model
 
 # Environment variables for GGUF model
-ENV GGUF_MODEL_PATH=/usr/src/app/models/qwen2.5-1.5b-tour-assistant-q4.gguf
+ENV GGUF_MODEL_PATH=/usr/src/app/model/qwen2.5-1.5b-tour-assistant-q4.gguf
 ENV N_CTX=2048
 ENV N_THREADS=4
 ENV N_GPU_LAYERS=0

@@ -14,7 +14,7 @@ app = FastAPI(title="Tour Recommendation AI Service")
 # LLM Configuration (GGUF)
 # ===============================
 GGUF_MODEL_PATH = os.getenv(
-    "GGUF_MODEL_PATH", "/usr/src/app/models/qwen2.5-1.5b-tour-assistant-q4.gguf"
+    "GGUF_MODEL_PATH", "/usr/src/app/model/qwen2.5-1.5b-tour-assistant-q4.gguf"
 )
 N_CTX = int(os.getenv("N_CTX", "2048"))  # Context window
 N_THREADS = int(os.getenv("N_THREADS", "4"))  # CPU threads
