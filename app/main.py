@@ -98,19 +98,32 @@ def load_llm():
 
 
 # ===============================
-# API Endpoints
+# System Prompt with Escalation Logic
 # ===============================
-@app.get("/health")
-def health():
-    return {
-        "status": "ok",
-        "model_loaded": llm is not None and llm not in ["FAILED", "NOT_FOUND"],
-    }
+SYSTEM_PROMPT = """Bạn là trợ lý du lịch TripConnect. Hãy trả lời thân thiện và hữu ích bằng tiếng Việt.
+
+QUAN TRỌNG - Quy tắc bắt buộc:
+Nếu khách hàng có ý định muốn gặp người thật, nhân viên hỗ trợ, hoặc có vấn đề cần giải quyết mà bạn không thể tự xử lý, bạn PHẢI thêm thẻ [ESCALATE] vào đầu câu trả lời của mình.
+
+Các trường hợp PHẢI escalate (thêm [ESCALATE] phía trước):
+1. Khách hàng yêu cầu: "gặp người thật", "gặp admin", "gặp nhân viên", "nói chuyện với người", "gặp nhà cung cấp", "gọi điện".
+2. Khách hàng phàn nàn: "AI không hiểu", "trả lời sai rồi", "tôi muốn khiếu nại", "tại sao lâu thế".
+3. Vấn đề phức tạp: Hoàn tiền, hủy đơn hàng, lỗi thanh toán, sự cố phát sinh khi đi tour.
+4. Khi bạn không chắc chắn về thông tin hoặc khách hàng hỏi lặp đi lặp lại một vấn đề mà bạn chưa giải quyết được.
+
+Khi bạn quyết định escalate:
+- BẮT ĐẦU bằng thẻ: [ESCALATE]
+- Sau đó nói: "Tôi đã hiểu yêu cầu của bạn. Tôi sẽ kết nối bạn với nhân viên hỗ trợ (Admin) ngay bây giờ. Vui lòng đợi trong giây lát, họ sẽ phản hồi bạn sớm nhất có thể ạ."
+
+Ví dụ:
+User: "cho tui nói chuyện với admin đi"
+Assistant: [ESCALATE] Tôi đã hiểu yêu cầu của bạn. Tôi sẽ kết nối bạn với nhân viên hỗ trợ (Admin) ngay bây giờ. Vui lòng đợi trong giây lát, họ sẽ phản hồi bạn sớm nhất có thể ạ.
+"""
 
 
 @app.post("/v1/chat/completions")
 async def chat_completions(data: ChatRequest):
-    """OpenAI-compatible chat completions endpoint"""
+    """OpenAI-compatible chat completions endpoint with escalation detection"""
     try:
         load_llm()
 
@@ -119,8 +132,8 @@ async def chat_completions(data: ChatRequest):
         if llm == "NOT_FOUND":
             raise Exception(f"Model file not found at {GGUF_MODEL_PATH}")
 
-        # Format prompt using Qwen ChatML template
-        prompt = ""
+        # Build prompt with system message
+        prompt = f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
         for msg in data.messages:
             prompt += f"<|im_start|>{msg.role}\n{msg.content}<|im_end|>\n"
         prompt += "<|im_start|>assistant\n"
@@ -130,20 +143,27 @@ async def chat_completions(data: ChatRequest):
             prompt,
             max_tokens=data.max_tokens,
             temperature=data.temperature,
-            stop=["<|im_end|}}", "<|im_start|>"],
+            stop=["<|im_end|>", "<|im_start|>"],
             echo=False,
         )
 
         response_text = output["choices"][0]["text"].strip()
 
+        # Check for escalation tag
+        should_escalate = "[ESCALATE]" in response_text
+
+        # Remove the tag from displayed response
+        clean_response = response_text.replace("[ESCALATE]", "").strip()
+
         return {
             "choices": [
                 {
-                    "message": {"role": "assistant", "content": response_text},
+                    "message": {"role": "assistant", "content": clean_response},
                     "finish_reason": output["choices"][0].get("finish_reason", "stop"),
                 }
             ],
             "usage": output.get("usage", {}),
+            "should_escalate": should_escalate,
         }
 
     except Exception as e:
@@ -154,10 +174,11 @@ async def chat_completions(data: ChatRequest):
                 {
                     "message": {
                         "role": "assistant",
-                        "content": "Toi la tro ly AI chuyen ve du lich. Hien tai he thong dang ban, ban vui long doi nhan vien ho tro hoac thu lai sau nhe!",
+                        "content": "Tôi là trợ lý AI chuyên về du lịch. Hiện tại hệ thống đang bận, bạn vui lòng đợi nhân viên hỗ trợ hoặc thử lại sau nhé!",
                     }
                 }
-            ]
+            ],
+            "should_escalate": True,  # Escalate on error
         }
 
 
